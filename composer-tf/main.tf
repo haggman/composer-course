@@ -16,7 +16,7 @@ module "composer_service_account" {
   project_id = var.project_id
   names      = ["composer-account"]
   // Add roles as needed
-  project_roles = ["${var.project_id}=>roles/composer.worker"]
+  project_roles = ["${var.project_id}=>roles/composer.worker", "${var.project_id}=>roles/bigquery.admin"]
   display_name  = "Composer Account"
 }
 

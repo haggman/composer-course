@@ -62,12 +62,12 @@ with DAG(
         retries=2,  # Retry the task twice if it fails
     )
 
-    my_variable = Variable.get("my_variable_name")
+    cool_variable = Variable.get("cool_variable")
 
     task4 = BashOperator(
         task_id='bash_task_with_variable',
-        bash_command=f'echo {my_variable}',
+        bash_command=f'echo {cool_variable}',
     )
 
 # Set task dependencies to put your operators together
-hello_task >> extract_load_tasks >> task3 >> goodbye_task
+hello_task >> extract_load_tasks >> task3 >> task4 >> goodbye_task
