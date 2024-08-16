@@ -1,0 +1,9 @@
+gcloud composer environments run lab-environment --location us-central1 \
+tasks test -- test_dag print_hello 2024-08-15
+
+gcloud composer environments run lab-environment --location us-central1 \
+dags trigger -- test_dag
+
+gcloud composer environments run lab-environment --location us-central1 \
+dags list -- --subdir /home/airflow/gcs/data/test 
+

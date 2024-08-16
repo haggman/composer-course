@@ -22,9 +22,9 @@ module "composer_service_account" {
 
 // Create the Composer instance
 resource "google_composer_environment" "lab_environment" {
-  name   = "lab-environment"
+  name    = "lab-environment"
   project = var.project_id
-  region = var.default_region
+  region  = var.default_region
 
   config {
     software_config {
@@ -33,5 +33,16 @@ resource "google_composer_environment" "lab_environment" {
     node_config {
       service_account = module.composer_service_account.email
     }
-  }
+
+    workloads_config {
+      worker { // scheduler, triggerer, web_server
+        min_count  = 2
+        max_count  = 6
+        cpu        = 1
+        memory_gb  = 2
+        storage_gb = 2
+      }
+    }
+    environment_size = "ENVIRONMENT_SIZE_SMALL"
+  } // ENVIRONMENT_SIZE_MEDIUM, ENVIRONMENT_SIZE_LARGE
 }
