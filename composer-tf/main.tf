@@ -9,15 +9,15 @@ resource "google_project_service" "composer_api" {
 }
 
 // Create the custom service account for the nodes
-module "composer_service_account" {
-  source  = "terraform-google-modules/service-accounts/google"
-  version = "~> 4.0"
-
-  project_id = var.project_id
-  names      = ["composer-account"]
-  // Add roles as needed
-  project_roles = ["${var.project_id}=>roles/composer.worker", "${var.project_id}=>roles/bigquery.admin"]
-  display_name  = "Composer Account"
+resource "google_service_account" "composer_account" {
+  account_id   = "composer-account"
+  display_name = "Custom SA for Cloud Composer Nodes"
+}
+// Bind the new service account to the composer.worker role
+resource "google_project_iam_member" "composer_account_worker_binding" {
+  project  = var.project_id
+  member   = "serviceAccount:${google_service_account.composer_account.email}"
+  role     = "roles/composer.worker"
 }
 
 // Create the Composer instance
@@ -28,21 +28,12 @@ resource "google_composer_environment" "lab_environment" {
 
   config {
     software_config {
-      image_version = "composer-3-airflow-2.7.3-build.11"
+      image_version = "composer-3-airflow-2.9.1"
     }
     node_config {
-      service_account = module.composer_service_account.email
+      service_account = google_service_account.composer_account.email
     }
 
-    workloads_config {
-      worker { // scheduler, triggerer, web_server
-        min_count  = 2
-        max_count  = 6
-        cpu        = 1
-        memory_gb  = 2
-        storage_gb = 2
-      }
-    }
     environment_size = "ENVIRONMENT_SIZE_SMALL"
   } // ENVIRONMENT_SIZE_MEDIUM, ENVIRONMENT_SIZE_LARGE
 }
