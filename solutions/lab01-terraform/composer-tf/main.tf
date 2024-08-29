@@ -13,11 +13,15 @@ resource "google_service_account" "composer_account" {
   account_id   = "composer-account"
   display_name = "Custom SA for Cloud Composer Nodes"
 }
-// Bind the new service account to the composer.worker role
-resource "google_project_iam_member" "composer_account_worker_binding" {
+// Bind the new service account to its roles
+resource "google_project_iam_member" "composer_account_bindings" {
+  for_each = toset([
+    "roles/composer.worker",
+  ])
+
   project  = var.project_id
   member   = "serviceAccount:${google_service_account.composer_account.email}"
-  role     = "roles/composer.worker"
+  role     = each.value
 }
 
 // Create the Composer instance
@@ -28,7 +32,7 @@ resource "google_composer_environment" "lab_environment" {
 
   config {
     software_config {
-      image_version = "composer-3-airflow-2.9.1"
+      image_version = "composer-3-airflow-2"
     }
     node_config {
       service_account = google_service_account.composer_account.email

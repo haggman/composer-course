@@ -1,10 +1,15 @@
 # Terraform
 .terraform
+terraform.tfstate.*
+.terraform.*
 terraform.tfstate
-terraform.tfstate.backup
-.terraform.lock.hcl
+plan.tfplan
 # Environments
 .env
 .venv
 env/
 venv/
+
+#Editor
+.vscode
+
