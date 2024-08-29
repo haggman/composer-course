@@ -1,9 +1,13 @@
+import os
+
 from airflow import DAG
 from airflow.providers.http.sensors.http import HttpSensor
 from airflow.providers.http.operators.http import SimpleHttpOperator
-from airflow.providers.google.cloud.operators.gcs import GCSCreateObjectOperator
+from airflow.providers.google.cloud.operators.gcs import GCSCreateBucketOperator, GCSCreateObjectOperator
 from airflow.utils.dates import days_ago
+from airflow.models import Variable
 
+# Define the DAG
 dag = DAG(
     'data_processing_workflow',
     depends_on_past = False,
@@ -12,24 +16,32 @@ dag = DAG(
     schedule_interval=None,
 )
 
-# Download the file content
-get_file = SimpleHttpOperator(
-    task_id='get_file',
-    http_conn_id='github_conn',
-    endpoint='user/repo/raw/main/path/to/file.txt',
-    method='GET',
-    response_filter=lambda response: response.text,
-    dag=dag,
+# Get the directory of the current DAG file
+dag_folder = os.path.dirname(__file__)
+
+# Get the project ID from the variable
+project_id = Variable.get("project_id")
+
+# Create the GCS bucket if it doesn't exist
+create_bucket = GCSCreateBucketOperator(
+    task_id='create_bucket',
+    bucket_name=project_id,
+    project_id=project_id,
+    location='us-central1',
+    gcp_conn_id='google_cloud_default',
+    storage_class='STANDARD',
+    labels={'env': 'dev', 'team': 'airflow'},
+    dag=dag
 )
 
 # Upload the file to GCS
-upload_to_gcs = GCSCreateObjectOperator(
+upload_sample_data = GCSCreateObjectOperator(
     task_id='upload_to_gcs',
-    bucket_name='your-bucket-name',
-    object_name='path/to/destination/file.txt',
-    data="{{ task_instance.xcom_pull(task_ids='get_file') }}",
+    bucket_name=project_id,
+    object_name='sample_data/events.json',
+    filename = os.path.join(dag_folder, 'sample_data/events.json'),
     gcp_conn_id='google_cloud_default',
     dag=dag,
 )
 
-check_file >> get_file >> upload_to_gcs
+create_bucket >> upload_sample_data
