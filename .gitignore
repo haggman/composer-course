@@ -3,7 +3,7 @@
 terraform.tfstate.*
 .terraform.*
 terraform.tfstate
-plan.tfplan
+*.tfplan
 # Environments
 .env
 .venv
@@ -12,4 +12,3 @@ venv/
 
 #Editor
 .vscode
-

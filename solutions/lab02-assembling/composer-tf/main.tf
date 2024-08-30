@@ -17,7 +17,7 @@ resource "google_service_account" "composer_account" {
 resource "google_project_iam_member" "composer_account_bindings" {
   for_each = toset([
     "roles/composer.worker",
-    "roles/storage.admin",
+    "roles/storage.admin", // So Airflow can access GCS
   ])
 
   project  = var.project_id
