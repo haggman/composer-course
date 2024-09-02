@@ -18,6 +18,8 @@ resource "google_project_iam_member" "composer_account_bindings" {
   for_each = toset([
     "roles/composer.worker",
     "roles/storage.admin", // So Airflow can access GCS
+    "roles/dataflow.admin", // To support Dataflow
+    "roles/bigquery.admin", //To access BQ
   ])
 
   project  = var.project_id
@@ -42,3 +44,10 @@ resource "google_composer_environment" "lab_environment" {
     environment_size = "ENVIRONMENT_SIZE_SMALL"
   } // ENVIRONMENT_SIZE_MEDIUM, ENVIRONMENT_SIZE_LARGE
 }
+
+# Create the Dataset in BigQuery
+resource "google_bigquery_dataset" "logs" {
+  dataset_id = "logs"  
+  project    = var.project_id
+  location   = var.default_region
+ }
