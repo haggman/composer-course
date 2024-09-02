@@ -34,23 +34,17 @@ dag = DAG(
     schedule_interval=None,
 )
 
-# Get the project ID from the variable
-project_id = Variable.get("project_id")
-
 # Get the directory of the current DAG file
 dag_folder = os.path.dirname(__file__)
-
-# Set a variable to hold the name of the bucket (same as project ID)
-bucket = project_id
 
 # Task 1: Wait for file to appear in GCS
 wait_for_file = GCSObjectExistenceSensor(
     task_id='wait_for_file',
-    bucket=bucket,
+    bucket='{{ var.value.bucket }}',
     object='sample_data/events.json',
     mode='poke',
     poke_interval=30,
-    timeout=600,  # Timeout after 10 minutes (600 seconds)
+    timeout=600,
     dag=dag
 )
 
@@ -71,17 +65,16 @@ gen_temp_table_name = PythonOperator(
 run_dataflow = BeamRunPythonPipelineOperator(
     task_id='run_dataflow',
     py_file=os.path.join(dag_folder, 'dataflow/batch_user_traffic_pipeline.py'),
-    # py_requirements=["apache-beam[gcp]"],
     runner=BeamRunnerType.DataflowRunner,
     pipeline_options={
-        'staging_location': f'gs://{bucket}/staging',
-        'temp_location': f'gs://{bucket}/temp',
-        'input_path': f'gs://{bucket}/sample_data/events.json',
+        'project': '{{ var.value.project_id }}',
+        'staging_location': 'gs://{{ var.value.bucket }}/staging',
+        'temp_location': 'gs://{{ var.value.bucket }}/temp',
+        'input_path': 'gs://{{ var.value.bucket }}/sample_data/events.json',
         'table_name': '{{ task_instance.xcom_pull(task_ids="gen_temp_table_name", key="temp_table_name") }}'
     },
     dataflow_config = DataflowConfiguration(
        job_name ='batch-user-traffic-pipeline-{{ ts_nodash | lower }}',
-       project_id = project_id,
        location = 'us-central1',
        wait_until_finished = True,
     ),
@@ -89,7 +82,7 @@ run_dataflow = BeamRunPythonPipelineOperator(
 )
 
 # Task 4: Get the Dataflow job ID
-def get_dataflow_job_id(job_name_prefix, **kwargs):
+def get_dataflow_job_id(job_name_prefix, project_id, **kwargs):
     client = dataflow_v1beta3.JobsV1Beta3Client()
 
     request = dataflow_v1beta3.ListJobsRequest(
@@ -97,39 +90,35 @@ def get_dataflow_job_id(job_name_prefix, **kwargs):
         location='us-central1',
         filter=dataflow_v1beta3.ListJobsRequest.Filter.ALL,
     )
-    print('Getting the jobs data')
+
     jobs = client.list_jobs(request=request)
-    print(f'Looking for job_name_prefix: {job_name_prefix}')
 
     job_id = None
     for job in jobs:
-        print(f'job.name={job.name}')
-        print(f'job.id={job.id}')
         if job.name.startswith(job_name_prefix):
             job_id = job.id
-            print('Found a match!')
             break
-    print(f'Did break, about to push ID. job_id={job_id}')
+
     # Push the job ID to XCom
     kwargs['ti'].xcom_push(key='dataflow_job_id', value=job_id)
-    return job_id
 
 get_job_id = PythonOperator(
     task_id='get_job_id',
     python_callable=get_dataflow_job_id,
     op_kwargs={
         'job_name_prefix': 'batch-user-traffic-pipeline-{{ ts_nodash | lower }}',
+        'project_id': '{{ var.value.project_id }}',
     },
     provide_context=True,
     dag=dag,
 )
 
 # Task 5: Wait for the Dataflow job to complete
-wati_until_dataflow_job_done = DataflowJobStatusSensor(
+wait_until_dataflow_job_done = DataflowJobStatusSensor(
     task_id="wati_until_dataflow_job_done",
     job_id="{{ti.xcom_pull(task_ids='get_job_id', key='dataflow_job_id')}}",
     expected_statuses={DataflowJobStatus.JOB_STATE_DONE},
-    project_id=project_id,
+    project_id = Variable.get("project_id"),
     location="us-central1",
     poke_interval=30, 
     timeout=600,
@@ -139,7 +128,7 @@ wati_until_dataflow_job_done = DataflowJobStatusSensor(
 export_results = BigQueryToGCSOperator(
     task_id='export_results',
     source_project_dataset_table='{{ task_instance.xcom_pull(task_ids="gen_temp_table_name", key="temp_table_name") }}',
-    destination_cloud_storage_uris=[f'gs://{bucket}/output/results_*.json'],
+    destination_cloud_storage_uris=['gs://{{ var.value.bucket }}/output/results_*.json'],
     export_format='JSON',
     dag=dag
 )
@@ -147,7 +136,7 @@ export_results = BigQueryToGCSOperator(
 # Task 7: Delete the input events file
 delete_input_file = GCSDeleteObjectsOperator(
     task_id='delete_input_file',
-    bucket_name=bucket,
+    bucket_name='{{ var.value.bucket }}',
     objects=['sample_data/events.json'],   
     dag=dag,
 )
@@ -162,6 +151,6 @@ drop_temp_table = BigQueryDeleteTableOperator(
 
 # Define task dependencies
 wait_for_file >> gen_temp_table_name >> run_dataflow
-run_dataflow >> get_job_id >> wati_until_dataflow_job_done
-wati_until_dataflow_job_done >> export_results >> delete_input_file
+run_dataflow >> get_job_id >> wait_until_dataflow_job_done
+wait_until_dataflow_job_done >> export_results >> delete_input_file
 delete_input_file >> drop_temp_table
