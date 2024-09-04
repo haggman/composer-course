@@ -5,8 +5,6 @@ import airflow
 
 from airflow.operators.dummy_operator import DummyOperator
 
-logger = logging.getLogger(__name__)
-
 default_args = {
 	'start_date': '2024-01-01',
 	'retries': 0,

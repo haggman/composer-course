@@ -6,7 +6,6 @@ import airflow
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 
-logger = logging.getLogger(__name__)
 
 from airflow.models import Variable
 project_id = Variable.get("project_id")

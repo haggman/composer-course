@@ -42,6 +42,7 @@ from airflow.operators.python import PythonOperator
 
 def my_python_function(x, y):
     answer = x + y
+    logger = kwargs['ti'].log
     logger.info(f"Answer: {answer}")
 
 calculate_sum = PythonOperator(

@@ -7,3 +7,14 @@ generate_content_task = GenerativeModelGenerateContentOperator(
         ],
         pretrained_model="gemini-1.5-pro",
     )
+
+from airflow.exceptions import AirflowException
+
+def my_task():
+    try:
+        # Your task logic here
+        result = some_operation()
+    except SomeSpecificException as e:
+        logger = kwargs['ti'].log
+        logger.error(f"Operation failed: {str(e)}")
+        raise AirflowException("Task failed due to a specific error")

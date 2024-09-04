@@ -3,7 +3,6 @@ from airflow import DAG
 import logging
 import airflow
 
-logger = logging.getLogger(__name__)
 
 from airflow.models import Variable
 project_id = Variable.get("project_id")
