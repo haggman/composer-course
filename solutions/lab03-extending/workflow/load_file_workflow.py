@@ -8,7 +8,7 @@ from airflow.models import Variable
 
 # Define the DAG
 dag = DAG(
-    'data_processing_workflow',
+    'load_file_workflow',
     catchup = False,
     start_date = days_ago(0),
     schedule_interval=None,
@@ -17,14 +17,11 @@ dag = DAG(
 # Get the directory of the current DAG file
 dag_folder = os.path.dirname(__file__)
 
-# Get the project ID from the variable
-project_id = Variable.get("project_id")
-
 # Create the GCS bucket if it doesn't exist
 create_bucket = GCSCreateBucketOperator(
     task_id='create_bucket',
-    bucket_name=project_id,
-    project_id=project_id,
+    bucket_name=Variable.get("bucket"),
+    project_id=Variable.get("project_id"),
     location='us-central1',
     storage_class='STANDARD',
     labels={'env': 'dev', 'team': 'airflow'},
@@ -34,7 +31,7 @@ create_bucket = GCSCreateBucketOperator(
 # Upload the file to GCS
 upload_sample_data = LocalFilesystemToGCSOperator(
     task_id='upload_to_gcs',
-    bucket=project_id,
+    bucket='{{ var.value.bucket }}',
     dst='sample_data/events.json',
     src = os.path.join(dag_folder, 'sample_data/events.json'),
     dag=dag,

@@ -1,28 +1,45 @@
-from airflow import DAG
-from airflow.utils.dates import days_ago
-from airflow.models import Variable
-from airflow.operators.python_operator import PythonOperator
-from airflow.providers.google.cloud.sensors.gcs import GCSObjectExistenceSensor
-from airflow.providers.apache.beam.operators.beam import BeamRunPythonPipelineOperator
-from airflow.providers.apache.beam.hooks.beam import BeamRunnerType
-from airflow.providers.google.cloud.transfers.bigquery_to_gcs import BigQueryToGCSOperator
-from airflow.providers.google.cloud.operators.dataflow import DataflowConfiguration
-from airflow.providers.google.cloud.sensors.dataflow import DataflowJobStatusSensor
-from airflow.providers.google.cloud.hooks.dataflow import DataflowJobStatus
-from airflow.providers.google.cloud.operators.gcs import GCSDeleteObjectsOperator
-from airflow.providers.google.cloud.operators.bigquery import BigQueryDeleteTableOperator
-
-from google.cloud import dataflow_v1beta3
-
+# To help with delays, like retry delay
 from datetime import timedelta
-import os
-import logging
+# To determine the path to the DAG folder
+import os 
+# We'll use this to help make a unique table name
 import uuid
 
+ # DAG object definition
+from airflow import DAG
+# To set the start date of the DAG
+from airflow.utils.dates import days_ago
+# To access variables defined in the Airflow UI
+from airflow.models import Variable
+# PythonOperator to execute Python callables
+from airflow.operators.python_operator import PythonOperator
+# Sensor to check for the existence of objects in Google Cloud Storage (GCS)
+from airflow.providers.google.cloud.sensors.gcs import GCSObjectExistenceSensor
+# Operator to run Beam pipelines on Dataflow
+from airflow.providers.apache.beam.operators.beam import BeamRunPythonPipelineOperator
+# Enum for specifying the Beam runner type
+from airflow.providers.apache.beam.hooks.beam import BeamRunnerType
+# Operator to export data from BigQuery to GCS
+from airflow.providers.google.cloud.transfers.bigquery_to_gcs import BigQueryToGCSOperator
+# Configuration class for Dataflow pipelines
+from airflow.providers.google.cloud.operators.dataflow import DataflowConfiguration
+# Sensor to monitor the status of Dataflow jobs
+from airflow.providers.google.cloud.sensors.dataflow import DataflowJobStatusSensor
+# Enum for Dataflow job states
+from airflow.providers.google.cloud.hooks.dataflow import DataflowJobStatus
+# Operator to delete objects from GCS
+from airflow.providers.google.cloud.operators.gcs import GCSDeleteObjectsOperator
+# Operator to delete tables from BigQuery
+from airflow.providers.google.cloud.operators.bigquery import BigQueryDeleteTableOperator
+
+# Client library for interacting with the Dataflow API
+from google.cloud import dataflow_v1beta3
+
+dag_folder = os.path.dirname(__file__)
 
 default_args = {
     'retries': 1,
-	'retry_delay': timedelta(minutes=1),
+    'retry_delay': timedelta(minutes=1),
 }
 
 # Define the DAG
@@ -33,9 +50,6 @@ dag = DAG(
     start_date = days_ago(0),
     schedule_interval=None,
 )
-
-# Get the directory of the current DAG file
-dag_folder = os.path.dirname(__file__)
 
 # Task 1: Wait for file to appear in GCS
 wait_for_file = GCSObjectExistenceSensor(
@@ -49,11 +63,11 @@ wait_for_file = GCSObjectExistenceSensor(
 )
 
 # Task 2: Generate a temp table name
-def generate_temp_table_name(**context):
-    logger = context['ti'].log
+def generate_temp_table_name(**kwargs):
+    logger = kwargs['ti'].log
     table_name = f'logs.user_traffic_{uuid.uuid4().hex}'
     logger.info(f'Generated temp table name: {table_name}')
-    context['ti'].xcom_push(key='temp_table_name', value=table_name)
+    kwargs['ti'].xcom_push(key='temp_table_name', value=table_name)
 
 gen_temp_table_name = PythonOperator(
         task_id='gen_temp_table_name',
@@ -71,17 +85,14 @@ run_dataflow = BeamRunPythonPipelineOperator(
         'staging_location': 'gs://{{ var.value.bucket }}/staging',
         'temp_location': 'gs://{{ var.value.bucket }}/temp',
         'input_path': 'gs://{{ var.value.bucket }}/sample_data/events.json',
-        'table_name': '{{ task_instance.xcom_pull(task_ids="gen_temp_table_name", key="temp_table_name") }}'
+        'table_name': '{{ task_instance.xcom_pull(task_ids="gen_temp_table_name", key="temp_table_name") }}',
+        'job_name': 'batch-user-traffic-pipeline-{{ ts_nodash | lower }}',
+        'region': 'us-central1',
     },
-    dataflow_config = DataflowConfiguration(
-       job_name ='batch-user-traffic-pipeline-{{ ts_nodash | lower }}',
-       location = 'us-central1',
-       wait_until_finished = True,
-    ),
     dag=dag
 )
 
-# Task 4: Get the Dataflow job ID
+ # Task 4: Get the Dataflow job ID
 def get_dataflow_job_id(job_name_prefix, project_id, **kwargs):
     client = dataflow_v1beta3.JobsV1Beta3Client()
 
@@ -128,8 +139,8 @@ wait_until_dataflow_job_done = DataflowJobStatusSensor(
 export_results = BigQueryToGCSOperator(
     task_id='export_results',
     source_project_dataset_table='{{ task_instance.xcom_pull(task_ids="gen_temp_table_name", key="temp_table_name") }}',
-    destination_cloud_storage_uris=['gs://{{ var.value.bucket }}/output/results_*.json'],
-    export_format='JSON',
+    destination_cloud_storage_uris=['gs://{{ var.value.bucket }}/output/results_*.csv'],
+    export_format='CSV',
     dag=dag
 )
 
@@ -149,7 +160,6 @@ drop_temp_table = BigQueryDeleteTableOperator(
     dag=dag,
 )
 
-# Define task dependencies
 wait_for_file >> gen_temp_table_name >> run_dataflow
 run_dataflow >> get_job_id >> wait_until_dataflow_job_done
 wait_until_dataflow_job_done >> export_results >> delete_input_file

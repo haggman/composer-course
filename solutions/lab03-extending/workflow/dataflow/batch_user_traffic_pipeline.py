@@ -65,6 +65,7 @@ def run():
     options.view_as(GoogleCloudOptions).staging_location = opts.staging_location
     options.view_as(GoogleCloudOptions).temp_location = opts.temp_location
     options.view_as(GoogleCloudOptions).labels = ''
+    options.view_as(GoogleCloudOptions).dataflow_service_options = ['enable_prime']
     options.view_as(GoogleCloudOptions).job_name = opts.job_name
     options.view_as(StandardOptions).runner = opts.runner
 
