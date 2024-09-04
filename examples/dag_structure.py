@@ -26,7 +26,7 @@ with DAG(
 
     # Function to do a little work in Python
     def print_hello():
-        print("Hello World!")
+        print("Hello World! from function")
 
     # Operators represent building blocks in your pipelines
     hello_task = PythonOperator(
@@ -36,7 +36,7 @@ with DAG(
     )
 
     def print_goodbye():
-        print("Goodbye World!")
+        print("Goodbye World! from function")
 
     goodbye_task = PythonOperator(
         task_id='goodbye_task',
@@ -52,9 +52,9 @@ with DAG(
     
     def my_python_function():
         try:
-            print('some code that might raise an exception')
+            print('task 3, some code that might raise an exception')
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print(f"task 3, an error occurred: {e}")
 
     task3 = PythonOperator(
         task_id='python_task_with_error_handling',
@@ -62,12 +62,15 @@ with DAG(
         retries=2,  # Retry the task twice if it fails
     )
 
-    cool_variable = Variable.get("cool_variable")
-
     task4 = BashOperator(
         task_id='bash_task_with_variable',
-        bash_command=f'echo {cool_variable}',
+        bash_command=f'echo task 4 {Variable.get("cool_variable")}',
+    )
+
+    task5 = BashOperator(
+        task_id='bash_task_with_better_variable',
+        bash_command='echo task 5 {{ var.value.cool_variable }}',
     )
 
 # Set task dependencies to put your operators together
-hello_task >> extract_load_tasks >> task3 >> task4 >> goodbye_task
+hello_task >> extract_load_tasks >> task3 >> task4 >> task5 >> goodbye_task
